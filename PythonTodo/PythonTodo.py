@@ -98,7 +98,7 @@ def show_todos(todos):
     """展示今日待办 + 实时时间 + 数量统计，界面整洁"""
     os.system('cls' if os.name == 'nt' else 'clear')
     print("=" * 65)
-    print("        📋 Python Todo List (3状态+分日管理完整版)")
+    print("        📋 Python Todo List Professional")
     print("=" * 65)
     today = get_today_date()
     today_yyyymmdd = get_today_date_yyyymmdd()
