@@ -2,23 +2,61 @@
 import time
 import datetime
 import threading
+import configparser
 
-# 存储待办事项的文件路径，永久保存，原存储格式不变
+# ========== 核心配置 - 修改配置文件后缀为 .configrecorderPythonTodo ✅ ==========
+# 存储待办事项的文件路径
 TODO_FILE = "todo_list.txt"
+# 功能开关配置文件路径【核心修改：后缀改为.configrecorderPythonTodo】
+CONFIG_FILE = "todo_config.configrecorderPythonTodo"
 # 全局变量：实时刷新的系统时间
 current_time_str = ""
-# ✅ 核心状态映射表 【用户直接输入对应数字即可】
+# 管理员密码
+ADMIN_PASSWORD = "sun130202"
+# 四状态映射表
 STATUS_MAP = {
     0: ("❌ 未完成", "未完成"),
     1: ("✅ 已完成", "已完成"),
     2: ("⚡ 进行中", "进行中"),
     3: ("❓ 未知", "未知")
 }
-# 状态提示文案，方便用户查看输入
+# 状态提示文案
 STATUS_TIPS = "状态量说明：0=未完成、1=已完成、2=进行中、3=未知"
-# ✅ 新增：管理员密码 固定为 sun130202
-ADMIN_PASSWORD = "sun130202"
+# ========== 可配置开关的功能列表（key=功能标识，value=功能名称） ==========
+FUNCTIONS = {
+    "add_todo": "添加今日待办",
+    "edit_todo": "编辑今日任务",
+    "edit_history_content": "修改历史任务内容",
+    "edit_history_status": "修改历史任务状态",
+    "edit_today_status": "修改今日任务状态"
+}
 
+# ========== 配置文件初始化与读取 ==========
+def init_config():
+    """初始化配置文件，不存在则创建，默认所有功能开启"""
+    config = configparser.ConfigParser()
+    if not os.path.exists(CONFIG_FILE):
+        # 默认所有功能开启（1=开启，0=关闭）
+        config["FUNCTION_SWITCH"] = {func: "1" for func in FUNCTIONS.keys()}
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            config.write(f)
+    # 读取自定义后缀的配置文件
+    config.read(CONFIG_FILE, encoding="utf-8")
+    return config
+
+def get_func_status(func_name):
+    """获取指定功能的开关状态：True=开启，False=关闭"""
+    config = init_config()
+    return config.get("FUNCTION_SWITCH", func_name, fallback="1") == "1"
+
+def set_func_status(func_name, status):
+    """设置功能开关状态：status=True(开启)/False(关闭)"""
+    config = init_config()
+    config["FUNCTION_SWITCH"][func_name] = "1" if status else "0"
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        config.write(f)
+
+# ========== 时间相关函数 ==========
 def get_format_time():
     """获取格式化完整时间：2026-01-13 20:59:59 周二"""
     week_dict = {0: "周一", 1: "周二", 2: "周三", 3: "周四", 4: "周五", 5: "周六", 6: "周日"}
@@ -45,6 +83,7 @@ def date_convert(ymd_str):
         return f"{ymd_str[:4]}-{ymd_str[4:6]}-{ymd_str[6:8]}"
     return ""
 
+# ========== 任务加载与保存 ==========
 def load_todos(is_today_only=True):
     """加载任务 - True=仅今日，False=全部任务"""
     todos = []
@@ -80,11 +119,12 @@ def load_todos(is_today_only=True):
     return todos
 
 def save_todos(todos):
-    """保存任务，格式：状态|内容|添加时间，完全不变"""
+    """保存任务，格式：状态|内容|添加时间"""
     with open(TODO_FILE, "w", encoding="utf-8") as f:
         for todo in todos:
             f.write(f"{todo['status']}|{todo['content']}|{todo['create_time']}\n")
 
+# ========== 实时时间线程 ==========
 def time_update_thread():
     """实时刷新时间线程"""
     global current_time_str
@@ -92,11 +132,12 @@ def time_update_thread():
         current_time_str = get_format_time()
         time.sleep(1)
 
+# ========== 任务展示 ==========
 def show_todos(todos):
     """展示今日任务列表+统计"""
     os.system('cls' if os.name == 'nt' else 'clear')
     print("=" * 70)
-    print("        📋 Python Todo List (手动状态量+管理员调试入口)")
+    print("        📋 Python Todo List (功能开关+管理员入口)")
     print("=" * 70)
     today = get_today_date()
     print(f"\n📅 今日日期：{today} ({get_today_date_yyyymmdd()}) | 昨日日期：{get_yesterday_date_yyyymmdd()}")
@@ -121,8 +162,13 @@ def show_todos(todos):
     print("\n" + " " * 22 + f"🕒 当前时间：{current_time_str}")
     print("=" * 70)
 
+# ========== 核心功能函数 ==========
 def add_todo(todos):
     """添加今日任务，默认状态0"""
+    if not get_func_status("add_todo"):
+        print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
+        time.sleep(1)
+        return
     content = input("请输入待办事项内容：").strip()
     if not content:
         print("❌ 待办内容不能为空！1秒后返回菜单...")
@@ -144,6 +190,10 @@ def add_todo(todos):
 
 def edit_todo(todos):
     """编辑今日任务内容"""
+    if not get_func_status("edit_todo"):
+        print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
+        time.sleep(1)
+        return
     if not todos:
         print("❌ 暂无待办事项！1秒后返回菜单...")
         time.sleep(1)
@@ -172,6 +222,10 @@ def edit_todo(todos):
 
 def edit_history_todo_content():
     """修改历史任务内容"""
+    if not get_func_status("edit_history_content"):
+        print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
+        time.sleep(1)
+        return
     all_todos = load_todos(False)
     if not all_todos:
         print("❌ 暂无历史任务！1秒后返回菜单...")
@@ -216,6 +270,10 @@ def edit_history_todo_content():
 
 def edit_history_todo_status():
     """修改历史任务状态 - 手动输入 0/1/2/3"""
+    if not get_func_status("edit_history_status"):
+        print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
+        time.sleep(1)
+        return
     all_todos = load_todos(False)
     if not all_todos:
         print("❌ 暂无历史任务！1秒后返回菜单...")
@@ -245,7 +303,6 @@ def edit_history_todo_status():
     try:
         num = int(input("\n请输入要修改状态的任务序号："))
         if 1 <= num <= len(target_todos):
-            # 用户手动输入状态量
             new_status = int(input(f"\n请输入新状态量 {STATUS_TIPS} ："))
             if new_status in STATUS_MAP:
                 target_index = all_todos.index(target_todos[num-1])
@@ -262,7 +319,11 @@ def edit_history_todo_status():
     time.sleep(2)
 
 def complete_todo(todos):
-    """修改今日任务状态 - 手动输入 0/1/2/3，极简逻辑"""
+    """修改今日任务状态 - 手动输入 0/1/2/3"""
+    if not get_func_status("edit_today_status"):
+        print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
+        time.sleep(1)
+        return
     if not todos:
         print("❌ 暂无今日任务！1秒后返回菜单...")
         time.sleep(1)
@@ -270,7 +331,6 @@ def complete_todo(todos):
     try:
         num = int(input("请输入要修改状态的任务序号："))
         if 1 <= num <= len(todos):
-            # 用户手动输入状态数字，最便捷
             new_status = int(input(f"\n请输入新状态量 {STATUS_TIPS} ："))
             if new_status in STATUS_MAP:
                 all_todos = load_todos(False)
@@ -358,31 +418,70 @@ def search_todo_by_date():
     
     input("\n查询完成，按回车键返回菜单...")
 
-# ✅ ========== 核心新增：管理员调试入口函数 (密码sun130202，暂空功能) ==========
+# ========== 管理员功能 - 功能开关配置 ==========
+def show_func_switch_menu():
+    """展示功能开关配置菜单"""
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print("=" * 60)
+    print("        ⚙️  功能开关配置中心 | 管理员专属")
+    print("=" * 60)
+    print("\n当前功能开关状态：")
+    for func_key, func_name in FUNCTIONS.items():
+        status = "✅ 开启" if get_func_status(func_key) else "❌ 关闭"
+        print(f"  {func_key:<20} {func_name:<15} {status}")
+    print("\n操作说明：输入功能标识(如add_todo)切换开关，输入0返回管理员菜单")
+
+def toggle_func_switch():
+    """切换功能开关状态"""
+    show_func_switch_menu()
+    while True:
+        choice = input("\n请输入要切换的功能标识(输入0返回)：").strip()
+        if choice == "0":
+            return
+        if choice in FUNCTIONS.keys():
+            current_status = get_func_status(choice)
+            set_func_status(choice, not current_status)
+            new_status = "开启" if not current_status else "关闭"
+            print(f"\n✅ 功能【{FUNCTIONS[choice]}】已{new_status}！")
+            time.sleep(1)
+            show_func_switch_menu()
+        else:
+            print("\n❌ 功能标识不存在！请重新输入")
+
 def admin_entrance():
-    """管理员调试入口 - 密码验证 + 空白页面预留功能"""
+    """管理员调试入口 - 功能开关菜单"""
     os.system('cls' if os.name == 'nt' else 'clear')
     print("=" * 60)
     print("        🔐 管理员调试入口 | 验证页面")
     print("=" * 60)
-    # 密码输入
     input_pwd = input("\n请输入管理员密码：").strip()
     if input_pwd != ADMIN_PASSWORD:
         print(f"\n❌ 密码错误！请确认密码后重试")
         time.sleep(2)
         return
-    # 密码正确，进入管理员空白页面
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print("=" * 60)
-    print("        ✅ 管理员调试中心 (功能暂未开发，预留空白)")
-    print("=" * 60)
-    print("\n✨ 此处为调试功能预留区域，后续可直接添加功能代码")
-    print("\n💡 说明：按【任意回车键】即可返回主菜单")
-    # 等待用户按键返回
-    input("\n")
+    # 密码正确，进入管理员主菜单
+    while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print("=" * 60)
+        print("        ✅ 管理员调试中心")
+        print("=" * 60)
+        print("1. 功能开关配置")
+        print("0. 返回主程序菜单")
+        choice = input("\n请输入操作序号：").strip()
+        if choice == "0":
+            return
+        elif choice == "1":
+            toggle_func_switch()
+        else:
+            print("❌ 输入错误！请输入0或1")
+            time.sleep(1)
 
+# ========== 主程序入口 ==========
 def main():
-    """主程序入口 - 新增9.管理员入口"""
+    """主程序入口 - 动态生成菜单（根据功能开关）"""
+    # 初始化自定义后缀的配置文件
+    init_config()
+    # 启动实时时间线程
     t = threading.Thread(target=time_update_thread, daemon=True)
     t.start()
     time.sleep(0.1)
@@ -390,36 +489,65 @@ def main():
     while True:
         todos = load_todos(True)
         show_todos(todos)
-        print("\n【⚙️ 操作菜单 | 含管理员调试入口 无任何BUG】")
-        print("1. 添加今日待办事项")
-        print("2. 编辑修改今日任务")
-        print("3. 修改昨日/历史任务内容")
-        print("4. 修改历史任务状态【输0/1/2/3】")
-        print("5. 修改今日任务状态【输0/1/2/3】")
-        print("6. 删除指定今日任务")
-        print("7. 清空今日所有待办")
-        print("8. 查询历史任务 (输入日期)")
-        print("9. 🔐 管理员调试入口")  # ✅ 新增菜单选项
-        print("0. 退出程序")
-        choice = input("\n请输入操作编号(0-9)：").strip()
-        
-        if choice == "0":
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print("=" * 70)
-            print("        👋 感谢使用 Todo List，下次再见！")
-            print("=" * 70)
-            break
-        elif choice == "1": add_todo(todos)
-        elif choice == "2": edit_todo(todos)
-        elif choice == "3": edit_history_todo_content()
-        elif choice == "4": edit_history_todo_status()
-        elif choice == "5": complete_todo(todos)
-        elif choice == "6": delete_todo(todos)
-        elif choice == "7": clear_today_todo()
-        elif choice == "8": search_todo_by_date()
-        elif choice == "9": admin_entrance()  # ✅ 进入管理员入口
-        else:
-            print("❌ 输入错误！请输入0-9的数字，1秒后返回...")
+        print("\n【⚙️  操作菜单 | 功能开关已生效】")
+        # 动态生成菜单选项（功能开启才显示）
+        menu_map = []
+        menu_idx = 1
+        if get_func_status("add_todo"):
+            print(f"{menu_idx}. 添加今日待办事项")
+            menu_map.append(("add_todo", add_todo, todos))
+            menu_idx +=1
+        if get_func_status("edit_todo"):
+            print(f"{menu_idx}. 编辑修改今日任务")
+            menu_map.append(("edit_todo", edit_todo, todos))
+            menu_idx +=1
+        if get_func_status("edit_history_content"):
+            print(f"{menu_idx}. 修改昨日/历史任务内容")
+            menu_map.append(("edit_history_content", edit_history_todo_content, None))
+            menu_idx +=1
+        if get_func_status("edit_history_status"):
+            print(f"{menu_idx}. 修改历史任务状态【输0/1/2/3】")
+            menu_map.append(("edit_history_status", edit_history_todo_status, None))
+            menu_idx +=1
+        if get_func_status("edit_today_status"):
+            print(f"{menu_idx}. 修改今日任务状态【输0/1/2/3】")
+            menu_map.append(("edit_today_status", complete_todo, todos))
+            menu_idx +=1
+        # 固定菜单（不支持开关）
+        print(f"{menu_idx}. 删除指定今日任务")
+        menu_map.append(("delete_todo", delete_todo, todos))
+        menu_idx +=1
+        print(f"{menu_idx}. 清空今日所有待办")
+        menu_map.append(("clear_today", clear_today_todo, None))
+        menu_idx +=1
+        print(f"{menu_idx}. 查询历史任务 (输入日期)")
+        menu_map.append(("search", search_todo_by_date, None))
+        menu_idx +=1
+        print(f"{menu_idx}. 🔐 管理员调试入口")
+        menu_map.append(("admin", admin_entrance, None))
+        menu_idx +=1
+        print(f"0. 退出程序")
+
+        # 菜单选择逻辑
+        try:
+            choice = int(input("\n请输入操作编号(0-{})：".format(menu_idx-1)).strip())
+            if choice == 0:
+                os.system('cls' if os.name == 'nt' else 'clear')
+                print("=" * 70)
+                print("        👋 感谢使用 Todo List，下次再见！")
+                print("=" * 70)
+                break
+            elif 1 <= choice <= len(menu_map):
+                func_name, func, param = menu_map[choice-1]
+                if param is not None:
+                    func(param)
+                else:
+                    func()
+            else:
+                print("❌ 输入错误！请输入0-{}的数字".format(menu_idx-1))
+                time.sleep(1)
+        except ValueError:
+            print("❌ 请输入正确的数字！")
             time.sleep(1)
 
 if __name__ == "__main__":
