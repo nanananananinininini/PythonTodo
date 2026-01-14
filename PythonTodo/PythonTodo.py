@@ -7,7 +7,7 @@ import threading
 TODO_FILE = "todo_list.txt"
 # 全局变量：实时刷新的系统时间
 current_time_str = ""
-# ========== 核心修改：新增状态3=未知，完整四状态映射表 ==========
+# 四状态映射表 0=未完成 1=已完成 2=进行中 3=未知
 STATUS_MAP = {
     0: ("❌ 未完成", "未完成"),
     1: ("✅ 已完成", "已完成"),
@@ -58,7 +58,7 @@ def load_todos(is_today_only=True):
                     # 兼容旧2字段/新3字段，完全不变的解析逻辑，杜绝报错
                     if len(line_split) == 2:
                         status, content = line_split
-                        create_time = "历史任务(无添加时间)"
+                        create_time = f"{today} 00:00:00 历史任务"
                     else:
                         status, content, create_time = line_split
                     
@@ -99,13 +99,13 @@ def show_todos(todos):
     """展示今日待办 + 实时时间 + 四状态数量统计，界面整洁"""
     os.system('cls' if os.name == 'nt' else 'clear')
     print("=" * 70)
-    print("        📋 Python Todo List ")
+    print("        📋 Python Todo List (修复写入BUG完整版)")
     print("=" * 70)
     today = get_today_date()
     today_yyyymmdd = get_today_date_yyyymmdd()
     yesterday_yyyymmdd = get_yesterday_date_yyyymmdd()
     
-    # ========== 适配四状态：新增未知状态统计 ==========
+    # 适配四状态：新增未知状态统计
     total = len(todos)
     uncompleted = len([t for t in todos if t["status"] == 0])
     ongoing = len([t for t in todos if t["status"] == 2])
@@ -129,22 +129,26 @@ def show_todos(todos):
     print("\n" + " " * 22 + f"🕒 当前时间：{current_time_str}")
     print("=" * 70)
 
+# ========== ✅ 修复核心BUG 1：新增任务写入失败 ==========
 def add_todo(todos):
-    """添加今日新任务，默认状态0（未完成）"""
+    """添加今日新任务，默认状态0（未完成）- 修复写入逻辑"""
     content = input("请输入待办事项内容：").strip()
     if not content:
         print("❌ 待办内容不能为空！1秒后返回菜单...")
         time.sleep(1)
         return
     create_time = get_format_time()
+    # 步骤1：追加新任务到当前列表
     todos.append({
         "content": content,
         "status": 0,  # 默认未完成
         "create_time": create_time,
         "task_date": get_today_date()
     })
-    # 保存全部任务，确保新增任务同步到文件
-    save_todos(load_todos(False))
+    # 步骤2：加载全量任务 + 合并新增任务 + 保存 ✅ 修复核心写入逻辑
+    all_todos = load_todos(False)
+    all_todos.append(todos[-1])
+    save_todos(all_todos)
     print(f"✅ 成功添加今日待办：{content}（初始状态：未完成）")
     time.sleep(1)
 
@@ -160,15 +164,12 @@ def edit_todo(todos):
             old_content = todos[num-1]["content"]
             new_content = input(f"当前内容：{old_content}\n请输入修改后的内容：").strip()
             if new_content:
-                # 步骤1：获取全部任务列表
                 all_todos = load_todos(False)
-                # 步骤2：找到今日任务在总列表中的位置并修改
                 target_task = todos[num-1]
                 for i in range(len(all_todos)):
                     if all_todos[i]["create_time"] == target_task["create_time"] and all_todos[i]["content"] == old_content:
                         all_todos[i]["content"] = new_content
                         break
-                # 步骤3：保存修改后的总列表
                 save_todos(all_todos)
                 print(f"✅ 已修改为：{new_content}")
             else:
@@ -197,14 +198,12 @@ def edit_history_todo_content():
         time.sleep(2)
         return
     
-    # 筛选指定日期的所有任务
     target_todos = [t for t in all_todos if t["task_date"] == target_date]
     if not target_todos:
         print(f"❌ {date_input}({target_date}) 该日期暂无任何任务！")
         time.sleep(2)
         return
     
-    # 展示该日期的所有任务+序号
     print(f"\n✅ 共查询到 {date_input}({target_date}) 的任务 {len(target_todos)} 条：")
     for index, todo in enumerate(target_todos, start=1):
         status_label = STATUS_MAP[todo["status"]][0]
@@ -212,11 +211,9 @@ def edit_history_todo_content():
         create_time = todo["create_time"]
         print(f"    任务序号 {index}. {status_label} | {content} | 添加于：{create_time}")
     
-    # 输入序号修改指定任务内容
     try:
         num = int(input("\n请输入要修改的任务序号："))
         if 1 <= num <= len(target_todos):
-            # 定位要修改的任务在总列表中的索引
             target_index = all_todos.index(target_todos[num-1])
             old_content = all_todos[target_index]["content"]
             new_content = input(f"当前内容：{old_content}\n请输入修改后的内容：").strip()
@@ -233,7 +230,7 @@ def edit_history_todo_content():
     
     time.sleep(2)
 
-# ========== 核心修改：四状态循环切换逻辑 0→2→1→3→0 ==========
+# 四状态循环切换逻辑 0→2→1→3→0
 def cycle_status(current_status):
     """状态循环切换：未完成 → 进行中 → 已完成 → 未知 → 未完成"""
     if current_status == 0:
@@ -263,14 +260,12 @@ def edit_history_todo_status():
         time.sleep(2)
         return
     
-    # 筛选指定日期的所有任务
     target_todos = [t for t in all_todos if t["task_date"] == target_date]
     if not target_todos:
         print(f"❌ {date_input}({target_date}) 该日期暂无任何任务！")
         time.sleep(2)
         return
     
-    # 展示该日期的所有任务+序号+当前状态
     print(f"\n✅ 共查询到 {date_input}({target_date}) 的任务 {len(target_todos)} 条：")
     for index, todo in enumerate(target_todos, start=1):
         status_label = STATUS_MAP[todo["status"]][0]
@@ -278,15 +273,12 @@ def edit_history_todo_status():
         create_time = todo["create_time"]
         print(f"    任务序号 {index}. {status_label} | {content} | 添加于：{create_time}")
     
-    # 输入序号修改指定任务状态
     try:
         num = int(input("\n请输入要修改状态的任务序号："))
         if 1 <= num <= len(target_todos):
-            # 定位要修改的任务在总列表中的索引
             target_index = all_todos.index(target_todos[num-1])
             old_status = all_todos[target_index]["status"]
             new_status = cycle_status(old_status)
-            # 更新状态
             all_todos[target_index]["status"] = new_status
             
             save_todos(all_todos)
@@ -301,7 +293,7 @@ def edit_history_todo_status():
     time.sleep(2)
 
 def complete_todo(todos):
-    """标记今日任务状态 - 支持四状态循环切换，基于总任务列表同步，无任何BUG"""
+    """标记今日任务状态 - 支持四状态循环切换，基于总任务列表同步"""
     if not todos:
         print("❌ 暂无待办事项，无需标记状态！1秒后返回菜单...")
         time.sleep(1)
@@ -309,16 +301,13 @@ def complete_todo(todos):
     try:
         num = int(input("请输入要修改状态的待办序号："))
         if 1 <= num <= len(todos):
-            # 基于总任务列表修改，确保同步，彻底解决修改不同步BUG
             all_todos = load_todos(False)
             target_task = todos[num-1]
-            # 精准匹配任务
             for i in range(len(all_todos)):
-                if all_todos[i]["create_time"] == target_task["create_time"] and all_todos[i]["content"] == target_task["content"]:
+                if all_todos[i]["create_time"] == target_task["create_time"]:
                     old_status = all_todos[i]["status"]
                     new_status = cycle_status(old_status)
                     all_todos[i]["status"] = new_status
-                    # 保存总任务
                     save_todos(all_todos)
                     old_label = STATUS_MAP[old_status][1]
                     new_label = STATUS_MAP[new_status][1]
@@ -339,15 +328,12 @@ def delete_todo(todos):
     try:
         num = int(input("请输入要删除的待办序号："))
         if 1 <= num <= len(todos):
-            # 步骤1：获取全部任务
             all_todos = load_todos(False)
-            # 步骤2：找到并删除对应任务
             target_task = todos[num-1]
             for i in range(len(all_todos)):
-                if all_todos[i]["create_time"] == target_task["create_time"] and all_todos[i]["content"] == target_task["content"]:
+                if all_todos[i]["create_time"] == target_task["create_time"]:
                     del all_todos[i]
                     break
-            # 步骤3：保存修改后的总列表
             save_todos(all_todos)
             print(f"✅ 已删除待办：{target_task['content']}")
         else:
@@ -360,7 +346,6 @@ def clear_today_todo():
     """清空今日所有任务，保留历史任务"""
     all_todos = load_todos(False)
     today = get_today_date()
-    # 过滤掉今日任务，保留其他日期的历史任务
     remain_todos = [t for t in all_todos if t["task_date"] != today]
     if len(all_todos) == len(remain_todos):
         print("❌ 暂无今日待办事项，无需清空！1秒后返回菜单...")
@@ -375,7 +360,7 @@ def clear_today_todo():
     time.sleep(1)
 
 def search_todo_by_date():
-    """查询功能：输入yyyymmdd格式日期，查询该日期所有任务+按序号精准查找，适配四状态"""
+    """查询功能：输入yyyymmdd格式日期，查询该日期所有任务+按序号精准查找"""
     all_todos = load_todos(False)
     if not all_todos:
         print("❌ 暂无任何历史任务可查询！1秒后返回菜单...")
@@ -391,14 +376,12 @@ def search_todo_by_date():
         time.sleep(2)
         return
     
-    # 筛选指定日期的所有任务
     target_todos = [t for t in all_todos if t["task_date"] == target_date]
     if not target_todos:
         print(f"❌ {date_input}({target_date}) 该日期暂无任何任务！")
         time.sleep(2)
         return
     
-    # 展示该日期的所有任务+序号
     print(f"\n✅ 共查询到 {date_input}({target_date}) 的任务 {len(target_todos)} 条：")
     for index, todo in enumerate(target_todos, start=1):
         status_label = STATUS_MAP[todo["status"]][0]
@@ -406,7 +389,6 @@ def search_todo_by_date():
         create_time = todo["create_time"]
         print(f"    查询序号 {index}. {status_label} | {content} | 添加于：{create_time}")
     
-    # 精准按序号查询单条详情
     try:
         print("\n———— 精准查询 ————")
         num = int(input("输入查询序号查看单条详情(输入0退出查询)："))
@@ -430,17 +412,16 @@ def search_todo_by_date():
     input("\n查询完成，按回车键返回菜单...")
 
 def main():
-    """主程序入口 - 菜单无变化，所有功能适配四状态"""
+    """主程序入口 - 菜单无变化，所有功能正常"""
     # 启动实时时间线程
     t = threading.Thread(target=time_update_thread, daemon=True)
     t.start()
     time.sleep(0.1)
     
     while True:
-        # 每次循环都重新加载今日任务，确保数据最新，无缓存问题
         todos = load_todos(True)
         show_todos(todos)
-        print("\n【⚙️ 操作菜单 | 功能齐全 无任何BUG】")
+        print("\n【⚙️ 操作菜单 | 功能齐全 写入正常】")
         print("1. 添加今日待办事项")
         print("2. 编辑修改今日任务")
         print("3. 修改昨日/历史任务内容")
