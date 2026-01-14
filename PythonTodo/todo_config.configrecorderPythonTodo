@@ -1,0 +1,7 @@
+[FUNCTION_SWITCH]
+add_todo = 1
+edit_todo = 1
+edit_history_content = 1
+edit_history_status = 1
+edit_today_status = 1
+
