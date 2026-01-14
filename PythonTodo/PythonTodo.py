@@ -99,7 +99,7 @@ def show_todos(todos):
     """展示今日待办 + 实时时间 + 四状态数量统计，界面整洁"""
     os.system('cls' if os.name == 'nt' else 'clear')
     print("=" * 70)
-    print("        📋 Python Todo List (四状态完整版 | 0未完成 2进行中 1已完成 3未知)")
+    print("        📋 Python Todo List ")
     print("=" * 70)
     today = get_today_date()
     today_yyyymmdd = get_today_date_yyyymmdd()
