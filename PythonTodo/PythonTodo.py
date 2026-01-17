@@ -17,7 +17,7 @@ STATUS_MAP = {
 }
 STATUS_TIPS = "状态量说明：0=未完成、1=已完成、2=进行中、3=未知"
 
-# ========== ✅ 新增顺延功能 - 更新功能开关列表（只加不改，顺序：清空后、查询前） ==========
+# ========== ✅ 更新功能开关列表（新增顺延昨日功能） ==========
 FUNCTIONS = {
     "add_todo": "添加今日待办事项",
     "edit_todo": "编辑修改今日任务",
@@ -26,7 +26,8 @@ FUNCTIONS = {
     "edit_today_status": "修改今日任务状态【输0/1/2/3】",
     "delete_todo": "删除指定今日任务",
     "clear_today": "清空今日所有待办",
-    "postpone_todo": "顺延今日任务至明天 ✨新增",  # 新增顺延功能
+    "postpone_todo": "顺延今日任务至明天",
+    "postpone_yesterday_todo": "顺延昨日任务至今天 ✨新增",  # 新增顺延昨日功能
     "search_todo": "查询历史任务（输入日期）",
     "admin_entrance": "🔐 管理员调试入口"
 }
@@ -51,7 +52,7 @@ def set_func_status(func_name, status):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         config.write(f)
 
-# ========== ✅ 新增顺延所需 - 补全日期函数 ==========
+# ========== 日期相关函数（补全昨日/明天日期函数） ==========
 def get_format_time():
     week_dict = {0: "周一", 1: "周二", 2: "周三", 3: "周四", 4: "周五", 5: "周六", 6: "周日"}
     now = datetime.datetime.now()
@@ -64,12 +65,17 @@ def get_today_date():
 def get_today_date_yyyymmdd():
     return datetime.datetime.now().strftime("%Y%m%d")
 
+def get_yesterday_date():
+    """获取昨日日期（格式：2026-01-14）- 顺延核心"""
+    yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
+    return yesterday.strftime("%Y-%m-%d")
+
 def get_yesterday_date_yyyymmdd():
     yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
     return yesterday.strftime("%Y%m%d")
 
-# ✅ 新增：获取明天的日期（顺延核心）
 def get_tomorrow_date():
+    """获取明天日期（格式：2026-01-16）- 原有顺延功能使用"""
     tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
     return tomorrow.strftime("%Y-%m-%d")
 
@@ -109,6 +115,35 @@ def load_todos(is_today_only=True):
                         })
     return todos
 
+def load_all_todos():
+    """加载所有任务（不分日期）- 用于筛选昨日任务"""
+    todos = []
+    if os.path.exists(TODO_FILE):
+        with open(TODO_FILE, "r", encoding="utf-8") as f:
+            for line in f.readlines():
+                line = line.strip()
+                if line:
+                    line_split = line.split("|", 2)
+                    if len(line_split) == 2:
+                        status, content = line_split
+                        create_time = f"{get_today_date()} 00:00:00 历史任务"
+                    else:
+                        status, content, create_time = line_split
+                    try:
+                        status_int = int(status)
+                        if status_int not in STATUS_MAP:
+                            status_int = 0
+                    except ValueError:
+                        status_int = 0
+                    task_date = create_time.split(" ")[0]
+                    todos.append({
+                        "content": content,
+                        "status": status_int,
+                        "create_time": create_time,
+                        "task_date": task_date
+                    })
+    return todos
+
 def save_todos(todos):
     with open(TODO_FILE, "w", encoding="utf-8") as f:
         for todo in todos:
@@ -125,10 +160,11 @@ def time_update_thread():
 def show_todos(todos):
     os.system('cls' if os.name == 'nt' else 'clear')
     print("=" * 70)
-    print("        📋 Python Todo List (无日志+任务顺延+全功能可控)")
+    print("        📋 Python Todo List (无日志+双顺延+全功能可控)")
     print("=" * 70)
     today = get_today_date()
-    print(f"\n📅 今日日期：{today} ({get_today_date_yyyymmdd()}) | 昨日日期：{get_yesterday_date_yyyymmdd()}")
+    yesterday = get_yesterday_date()
+    print(f"\n📅 今日日期：{today} ({get_today_date_yyyymmdd()}) | 昨日日期：{yesterday} ({get_yesterday_date_yyyymmdd()})")
     print(f"📌 {STATUS_TIPS}")
     
     total = len(todos)
@@ -149,7 +185,7 @@ def show_todos(todos):
     print("\n" + " " * 22 + f"🕒 当前时间：{current_time_str}")
     print("=" * 70)
 
-# ========== 核心功能函数（全部加开关校验，无改动） ==========
+# ========== 核心功能函数（无改动） ==========
 def add_todo(todos):
     if not get_func_status("add_todo"):
         print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
@@ -168,7 +204,7 @@ def add_todo(todos):
         "task_date": get_today_date()
     }
     todos.append(new_task)
-    all_todos = load_todos(False)
+    all_todos = load_all_todos()
     all_todos.append(new_task)
     save_todos(all_todos)
     print(f"✅ 成功添加今日待办：{content}（默认状态：未完成 0）")
@@ -189,7 +225,7 @@ def edit_todo(todos):
             old_content = todos[num-1]["content"]
             new_content = input(f"当前内容：{old_content}\n请输入修改后的内容：").strip()
             if new_content:
-                all_todos = load_todos(False)
+                all_todos = load_all_todos()
                 target_task = todos[num-1]
                 for i in range(len(all_todos)):
                     if all_todos[i]["create_time"] == target_task["create_time"]:
@@ -210,7 +246,7 @@ def edit_history_todo_content():
         print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
         time.sleep(1)
         return
-    all_todos = load_todos(False)
+    all_todos = load_all_todos()
     if not all_todos:
         print("❌ 暂无历史任务！1秒后返回菜单...")
         time.sleep(1)
@@ -252,7 +288,7 @@ def edit_history_todo_status():
         print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
         time.sleep(1)
         return
-    all_todos = load_todos(False)
+    all_todos = load_all_todos()
     if not all_todos:
         print("❌ 暂无历史任务！1秒后返回菜单...")
         time.sleep(1)
@@ -301,265 +337,4 @@ def complete_todo(todos):
         time.sleep(1)
         return
     try:
-        num = int(input("请输入要修改状态的任务序号："))
-        if 1 <= num <= len(todos):
-            new_status = int(input(f"\n请输入新状态量 {STATUS_TIPS} ："))
-            if new_status in STATUS_MAP:
-                all_todos = load_todos(False)
-                target_task = todos[num-1]
-                for i in range(len(all_todos)):
-                    if all_todos[i]["create_time"] == target_task["create_time"]:
-                        old_status = all_todos[i]["status"]
-                        all_todos[i]["status"] = new_status
-                        save_todos(all_todos)
-                        print(f"✅ 状态修改成功！{STATUS_MAP[old_status][1]} → {STATUS_MAP[new_status][1]}")
-                        break
-            else:
-                print(f"❌ 状态量错误！仅支持 0/1/2/3")
-        else:
-            print("❌ 序号不存在！")
-    except ValueError:
-        print("❌ 请输入正确的数字！")
-    time.sleep(1)
-
-def delete_todo(todos):
-    if not get_func_status("delete_todo"):
-        print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
-        time.sleep(1)
-        return
-    if not todos:
-        print("❌ 暂无任务可删！")
-        time.sleep(1)
-        return
-    try:
-        num = int(input("请输入要删除的任务序号："))
-        if 1 <= num <= len(todos):
-            all_todos = load_todos(False)
-            target_task = todos[num-1]
-            for i in range(len(all_todos)):
-                if all_todos[i]["create_time"] == target_task["create_time"]:
-                    del all_todos[i]
-                    break
-            save_todos(all_todos)
-            print(f"✅ 已删除：{target_task['content']}")
-        else:
-            print("❌ 序号不存在！")
-    except ValueError:
-        print("❌ 请输入数字！")
-    time.sleep(1)
-
-def clear_today_todo():
-    if not get_func_status("clear_today"):
-        print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
-        time.sleep(1)
-        return
-    all_todos = load_todos(False)
-    today = get_today_date()
-    remain_todos = [t for t in all_todos if t["task_date"] != today]
-    if len(all_todos) == len(remain_todos):
-        print("❌ 暂无今日任务可清空！")
-        time.sleep(1)
-        return
-    if input("⚠️ 确认清空今日所有任务？(输入y确认)：").strip().lower() == "y":
-        save_todos(remain_todos)
-        print("✅ 今日任务已清空！")
-    else:
-        print("✅ 取消清空")
-    time.sleep(1)
-
-# ========== ✅ 核心新增：顺延今日任务至明天 完整功能函数 ==========
-def postpone_today_todo():
-    if not get_func_status("postpone_todo"):
-        print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
-        time.sleep(1)
-        return
-    today_todos = load_todos(True)
-    if not today_todos:
-        print("❌ 暂无今日任务可顺延！1秒后返回菜单...")
-        time.sleep(1)
-        return
-    # 筛选：只顺延 未完成(0) 和 进行中(2) 的任务，已完成/未知的不顺延
-    postpone_tasks = [t for t in today_todos if t["status"] in [0, 2]]
-    if not postpone_tasks:
-        print("✅ 今日无【未完成/进行中】的任务，无需顺延！1秒后返回菜单...")
-        time.sleep(1)
-        return
-    
-    # 确认顺延操作
-    confirm = input(f"⚠️ 检测到{len(postpone_tasks)}条可顺延任务，是否顺延至明天？(输入y确认)：").strip().lower()
-    if confirm != "y":
-        print("✅ 取消顺延操作")
-        time.sleep(1)
-        return
-    
-    # 执行顺延逻辑：新增到明天，状态重置为未完成，今日任务保留
-    all_todos = load_todos(False)
-    tomorrow_date = get_tomorrow_date()
-    postpone_count = 0
-    for task in postpone_tasks:
-        # 生成明天任务的创建时间
-        tomorrow_create_time = get_format_time().replace(get_today_date(), tomorrow_date)
-        new_task = {
-            "content": task["content"],
-            "status": 0,          # 顺延任务默认重置为【未完成】
-            "create_time": tomorrow_create_time,
-            "task_date": tomorrow_date
-        }
-        all_todos.append(new_task)
-        postpone_count += 1
-    
-    save_todos(all_todos)
-    print(f"✅ 成功顺延 {postpone_count} 条任务至明天！状态均重置为【未完成】")
-    time.sleep(1.5)
-
-def search_todo_by_date():
-    if not get_func_status("search_todo"):
-        print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
-        time.sleep(1)
-        return
-    all_todos = load_todos(False)
-    if not all_todos:
-        print("❌ 暂无历史任务！")
-        time.sleep(1)
-        return
-    print(f"\n===== 📖 查询历史任务 (输入格式：yyyymmdd) =====")
-    date_input = input("请输入查询日期：").strip()
-    target_date = date_convert(date_input)
-    if not target_date:
-        print("❌ 日期格式错误！")
-        time.sleep(2)
-        return
-    target_todos = [t for t in all_todos if t["task_date"] == target_date]
-    if not target_todos:
-        print(f"❌ {date_input} 无任务！")
-        time.sleep(2)
-        return
-    print(f"\n✅ {date_input} 共 {len(target_todos)} 条任务：")
-    for index, todo in enumerate(target_todos, start=1):
-        print(f"    {index}. {STATUS_MAP[todo['status']][0]} | {todo['content']} | {todo['create_time']}")
-    input("\n查询完成，按回车键返回菜单...")
-
-# ========== 管理员功能（无改动，自动适配新增的顺延开关） ==========
-def show_func_switch_menu():
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print("=" * 60)
-    print("        ⚙️  功能开关配置中心 | 管理员专属")
-    print("=" * 60)
-    print("\n当前功能开关状态：")
-    for func_key, func_name in FUNCTIONS.items():
-        status = "✅ 开启" if get_func_status(func_key) else "❌ 关闭"
-        print(f"  {func_key:<20} {func_name:<25} {status}")
-    print("\n操作说明：输入功能标识(如add_todo)切换开关，输入0返回管理员菜单")
-
-def toggle_func_switch():
-    show_func_switch_menu()
-    while True:
-        choice = input("\n请输入要切换的功能标识(输入0返回)：").strip()
-        if choice == "0":
-            return
-        if choice in FUNCTIONS.keys():
-            current_status = get_func_status(choice)
-            set_func_status(choice, not current_status)
-            new_status = "开启" if not current_status else "关闭"
-            print(f"\n✅ 功能【{FUNCTIONS[choice]}】已{new_status}！")
-            time.sleep(1)
-            show_func_switch_menu()
-        else:
-            print("\n❌ 功能标识不存在！请重新输入")
-
-def admin_entrance():
-    if not get_func_status("admin_entrance"):
-        print("❌ 管理员入口已被关闭！1秒后返回菜单...")
-        time.sleep(1)
-        return
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print("=" * 60)
-    print("        🔐 管理员调试入口 | 验证页面")
-    print("=" * 60)
-    input_pwd = input("\n请输入管理员密码：").strip()
-    if input_pwd != ADMIN_PASSWORD:
-        print(f"\n❌ 密码错误！请确认密码后重试")
-        time.sleep(2)
-        return
-    while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
-        print("=" * 60)
-        print("        ✅ 管理员调试中心")
-        print("=" * 60)
-        print("1. 功能开关配置")
-        print("0. 返回主程序菜单")
-        choice = input("\n请输入操作序号：").strip()
-        if choice == "0":
-            return
-        elif choice == "1":
-            toggle_func_switch()
-        else:
-            print("❌ 输入错误！请输入0或1")
-            time.sleep(1)
-
-# ========== ✅ 仅更新菜单顺序+映射表 - 主程序入口（无其他改动，无BUG） ==========
-def main():
-    init_config()
-    # 启动实时时间线程
-    t = threading.Thread(target=time_update_thread, daemon=True)
-    t.start()
-    time.sleep(0.1)
-    
-    # 功能映射表：新增顺延功能的映射，其他无改动
-    func_action_map = {
-        "add_todo": lambda: add_todo(todos),
-        "edit_todo": lambda: edit_todo(todos),
-        "edit_history_content": lambda: edit_history_todo_content(),
-        "edit_history_status": lambda: edit_history_todo_status(),
-        "edit_today_status": lambda: complete_todo(todos),
-        "delete_todo": lambda: delete_todo(todos),
-        "clear_today": lambda: clear_today_todo(),
-        "postpone_todo": lambda: postpone_today_todo(),  # 新增顺延映射
-        "search_todo": lambda: search_todo_by_date(),
-        "admin_entrance": lambda: admin_entrance()
-    }
-
-    while True:
-        todos = load_todos(True)
-        show_todos(todos)
-        print("\n【⚙️  操作菜单 | 全功能开关已生效】")
-        menu_list = []
-        menu_idx = 1
-        # ✅ 固定功能顺序：新增顺延在清空后、查询前，完美匹配需求
-        func_order = ["add_todo", "edit_todo", "edit_history_content", "edit_history_status", 
-                      "edit_today_status", "delete_todo", "clear_today", "postpone_todo",
-                      "search_todo", "admin_entrance"]
-        # 生成可用菜单
-        for func_key in func_order:
-            if get_func_status(func_key):
-                print(f"{menu_idx}. {FUNCTIONS[func_key]}")
-                menu_list.append(func_key)
-                menu_idx += 1
-        print(f"0. 退出程序")
-
-        # 菜单选择与调用 - 加容错处理
-        try:
-            choice = input("\n请输入操作编号(0-{})：".format(len(menu_list))).strip()
-            if not choice.isdigit():
-                print("❌ 请输入有效的数字序号！")
-                time.sleep(1)
-                continue
-            choice = int(choice)
-            if choice == 0:
-                os.system('cls' if os.name == 'nt' else 'clear')
-                print("=" * 70)
-                print("        👋 感谢使用 Todo List，下次再见！")
-                print("=" * 70)
-                break
-            elif 1 <= choice <= len(menu_list):
-                target_func = menu_list[choice-1]
-                func_action_map[target_func]() # 安全调用功能，无任何崩溃
-            else:
-                print(f"❌ 输入错误！请输入0-{len(menu_list)}的数字")
-                time.sleep(1)
-        except Exception as e:
-            print(f"❌ 操作出错，自动重试！错误信息：{str(e)}")
-            time.sleep(2)
-
-if __name__ == "__main__":
-    main()
+        num = int(input("请输入要修改状态的
