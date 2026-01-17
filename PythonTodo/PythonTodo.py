@@ -17,7 +17,7 @@ STATUS_MAP = {
 }
 STATUS_TIPS = "状态量说明：0=未完成、1=已完成、2=进行中、3=未知"
 
-# ========== ✅ 新增顺延功能 - 更新功能开关列表（只加不改，顺序：清空后、查询前） ==========
+# ========== ✅ 更新功能开关列表 新增顺延昨日功能 ==========
 FUNCTIONS = {
     "add_todo": "添加今日待办事项",
     "edit_todo": "编辑修改今日任务",
@@ -26,7 +26,8 @@ FUNCTIONS = {
     "edit_today_status": "修改今日任务状态【输0/1/2/3】",
     "delete_todo": "删除指定今日任务",
     "clear_today": "清空今日所有待办",
-    "postpone_todo": "顺延今日任务至明天 ✨新增",  # 新增顺延功能
+    "postpone_todo": "顺延今日任务至明天",
+    "postpone_yesterday": "顺延昨日任务至今天",  # 新增顺延昨日功能
     "search_todo": "查询历史任务（输入日期）",
     "admin_entrance": "🔐 管理员调试入口"
 }
@@ -51,7 +52,7 @@ def set_func_status(func_name, status):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         config.write(f)
 
-# ========== ✅ 新增顺延所需 - 补全日期函数 ==========
+# ========== 时间相关函数 补全昨日/明日日期 ==========
 def get_format_time():
     week_dict = {0: "周一", 1: "周二", 2: "周三", 3: "周四", 4: "周五", 5: "周六", 6: "周日"}
     now = datetime.datetime.now()
@@ -64,12 +65,17 @@ def get_today_date():
 def get_today_date_yyyymmdd():
     return datetime.datetime.now().strftime("%Y%m%d")
 
+def get_yesterday_date():
+    # 获取昨日完整日期 2026-01-17
+    yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
+    return yesterday.strftime("%Y-%m-%d")
+
 def get_yesterday_date_yyyymmdd():
     yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
     return yesterday.strftime("%Y%m%d")
 
-# ✅ 新增：获取明天的日期（顺延核心）
 def get_tomorrow_date():
+    # 获取明日完整日期 2026-01-19
     tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
     return tomorrow.strftime("%Y-%m-%d")
 
@@ -125,10 +131,10 @@ def time_update_thread():
 def show_todos(todos):
     os.system('cls' if os.name == 'nt' else 'clear')
     print("=" * 70)
-    print("        📋 Python Todo List (无日志+任务顺延+全功能可控)")
+    print("        📋 Python Todo List (无日志+双顺延+全功能可控+无BUG)")
     print("=" * 70)
     today = get_today_date()
-    print(f"\n📅 今日日期：{today} ({get_today_date_yyyymmdd()}) | 昨日日期：{get_yesterday_date_yyyymmdd()}")
+    print(f"\n📅 今日日期：{today} ({get_today_date_yyyymmdd()}) | 昨日日期：{get_yesterday_date()} ({get_yesterday_date_yyyymmdd()})")
     print(f"📌 {STATUS_TIPS}")
     
     total = len(todos)
@@ -367,7 +373,7 @@ def clear_today_todo():
         print("✅ 取消清空")
     time.sleep(1)
 
-# ========== ✅ 核心新增：顺延今日任务至明天 完整功能函数 ==========
+# ========== ✅ 顺延今日任务至明天 原有功能 ==========
 def postpone_today_todo():
     if not get_func_status("postpone_todo"):
         print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
@@ -378,38 +384,74 @@ def postpone_today_todo():
         print("❌ 暂无今日任务可顺延！1秒后返回菜单...")
         time.sleep(1)
         return
-    # 筛选：只顺延 未完成(0) 和 进行中(2) 的任务，已完成/未知的不顺延
     postpone_tasks = [t for t in today_todos if t["status"] in [0, 2]]
     if not postpone_tasks:
-        print("✅ 今日无【未完成/进行中】的任务，无需顺延！1秒后返回菜单...")
+        print("✅ 今日无【未完成/进行中】的任务，无需顺延！")
         time.sleep(1)
         return
-    
-    # 确认顺延操作
     confirm = input(f"⚠️ 检测到{len(postpone_tasks)}条可顺延任务，是否顺延至明天？(输入y确认)：").strip().lower()
     if confirm != "y":
         print("✅ 取消顺延操作")
         time.sleep(1)
         return
-    
-    # 执行顺延逻辑：新增到明天，状态重置为未完成，今日任务保留
     all_todos = load_todos(False)
     tomorrow_date = get_tomorrow_date()
     postpone_count = 0
     for task in postpone_tasks:
-        # 生成明天任务的创建时间
         tomorrow_create_time = get_format_time().replace(get_today_date(), tomorrow_date)
         new_task = {
             "content": task["content"],
-            "status": 0,          # 顺延任务默认重置为【未完成】
+            "status": 0,
             "create_time": tomorrow_create_time,
             "task_date": tomorrow_date
         }
         all_todos.append(new_task)
         postpone_count += 1
-    
     save_todos(all_todos)
-    print(f"✅ 成功顺延 {postpone_count} 条任务至明天！状态均重置为【未完成】")
+    print(f"✅ 成功顺延 {postpone_count} 条任务至明天！状态重置为【未完成】")
+    time.sleep(1.5)
+
+# ========== ✅ 核心新增：顺延昨日任务至今天 完整功能 ==========
+def postpone_yesterday_todo():
+    if not get_func_status("postpone_yesterday"):
+        print("❌ 该功能已被管理员关闭！1秒后返回菜单...")
+        time.sleep(1)
+        return
+    all_todos = load_todos(False)
+    yesterday_date = get_yesterday_date()
+    # 筛选昨日所有任务
+    yesterday_todos = [t for t in all_todos if t["task_date"] == yesterday_date]
+    if not yesterday_todos:
+        print("❌ 暂无昨日任务可顺延！1秒后返回菜单...")
+        time.sleep(1)
+        return
+    # 只顺延未完成/进行中的任务
+    postpone_tasks = [t for t in yesterday_todos if t["status"] in [0, 2]]
+    if not postpone_tasks:
+        print("✅ 昨日无【未完成/进行中】的任务，无需顺延！")
+        time.sleep(1)
+        return
+    # 二次确认
+    confirm = input(f"⚠️ 检测到{len(postpone_tasks)}条昨日待办任务，是否顺延至今天？(输入y确认)：").strip().lower()
+    if confirm != "y":
+        print("✅ 取消顺延操作")
+        time.sleep(1)
+        return
+    # 执行顺延：新增到今日，状态重置为未完成，昨日任务保留
+    today_date = get_today_date()
+    postpone_count = 0
+    for task in postpone_tasks:
+        today_create_time = get_format_time().replace(yesterday_date, today_date)
+        new_task = {
+            "content": task["content"],
+            "status": 0,
+            "create_time": today_create_time,
+            "task_date": today_date
+        }
+        all_todos.append(new_task)
+        postpone_count += 1
+    save_todos(all_todos)
+    print(f"✅ 成功顺延 {postpone_count} 条昨日任务至今天！状态重置为【未完成】")
     time.sleep(1.5)
 
 def search_todo_by_date():
@@ -439,7 +481,7 @@ def search_todo_by_date():
         print(f"    {index}. {STATUS_MAP[todo['status']][0]} | {todo['content']} | {todo['create_time']}")
     input("\n查询完成，按回车键返回菜单...")
 
-# ========== 管理员功能（无改动，自动适配新增的顺延开关） ==========
+# ========== 管理员功能（自动适配新增开关，无改动） ==========
 def show_func_switch_menu():
     os.system('cls' if os.name == 'nt' else 'clear')
     print("=" * 60)
@@ -497,15 +539,13 @@ def admin_entrance():
             print("❌ 输入错误！请输入0或1")
             time.sleep(1)
 
-# ========== ✅ 仅更新菜单顺序+映射表 - 主程序入口（无其他改动，无BUG） ==========
+# ========== ✅ 主程序入口 仅更新菜单顺序和映射表 无其他改动 ==========
 def main():
     init_config()
-    # 启动实时时间线程
     t = threading.Thread(target=time_update_thread, daemon=True)
     t.start()
     time.sleep(0.1)
     
-    # 功能映射表：新增顺延功能的映射，其他无改动
     func_action_map = {
         "add_todo": lambda: add_todo(todos),
         "edit_todo": lambda: edit_todo(todos),
@@ -514,7 +554,8 @@ def main():
         "edit_today_status": lambda: complete_todo(todos),
         "delete_todo": lambda: delete_todo(todos),
         "clear_today": lambda: clear_today_todo(),
-        "postpone_todo": lambda: postpone_today_todo(),  # 新增顺延映射
+        "postpone_todo": lambda: postpone_today_todo(),
+        "postpone_yesterday": lambda: postpone_yesterday_todo(), # 新增映射
         "search_todo": lambda: search_todo_by_date(),
         "admin_entrance": lambda: admin_entrance()
     }
@@ -525,11 +566,10 @@ def main():
         print("\n【⚙️  操作菜单 | 全功能开关已生效】")
         menu_list = []
         menu_idx = 1
-        # ✅ 固定功能顺序：新增顺延在清空后、查询前，完美匹配需求
+        # 固定菜单顺序 顺延今日→顺延昨日→查询历史
         func_order = ["add_todo", "edit_todo", "edit_history_content", "edit_history_status", 
                       "edit_today_status", "delete_todo", "clear_today", "postpone_todo",
-                      "search_todo", "admin_entrance"]
-        # 生成可用菜单
+                      "postpone_yesterday","search_todo", "admin_entrance"]
         for func_key in func_order:
             if get_func_status(func_key):
                 print(f"{menu_idx}. {FUNCTIONS[func_key]}")
@@ -537,7 +577,6 @@ def main():
                 menu_idx += 1
         print(f"0. 退出程序")
 
-        # 菜单选择与调用 - 加容错处理
         try:
             choice = input("\n请输入操作编号(0-{})：".format(len(menu_list))).strip()
             if not choice.isdigit():
@@ -553,7 +592,7 @@ def main():
                 break
             elif 1 <= choice <= len(menu_list):
                 target_func = menu_list[choice-1]
-                func_action_map[target_func]() # 安全调用功能，无任何崩溃
+                func_action_map[target_func]()
             else:
                 print(f"❌ 输入错误！请输入0-{len(menu_list)}的数字")
                 time.sleep(1)
